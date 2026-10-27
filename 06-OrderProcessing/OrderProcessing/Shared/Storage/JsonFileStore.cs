@@ -293,7 +293,7 @@ namespace OrderProcessing.Shared.Storage
         public void Write<T>(
             string fileName,
             T data)
-        {
+         {
             string filePath = GetFilePath(fileName);
 
             Directory.CreateDirectory(
@@ -427,5 +427,7 @@ namespace OrderProcessing.Shared.Storage
                 fileLock.Release();
             }
         }
+
+
     }
 }

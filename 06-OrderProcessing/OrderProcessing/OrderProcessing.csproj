@@ -20,7 +20,6 @@
     <Folder Include="Phase4\" />
     <Folder Include="Phase3\" />
     <Folder Include="Phase2\" />
-    <Folder Include="Phase1\" />
   </ItemGroup>
 
 </Project>
