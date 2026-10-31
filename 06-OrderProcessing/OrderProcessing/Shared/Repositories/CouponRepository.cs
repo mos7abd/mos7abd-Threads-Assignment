@@ -76,4 +76,50 @@ public class CouponRepository
 
         return coupon;
     }
+    public Coupon? GetByCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            Log.Info(
+                "CouponRepository -> Coupon code is empty.");
+
+            return null;
+        }
+
+        Log.Info(
+            "CouponRepository -> Opening connection...");
+
+        Thread.Sleep(200);
+
+        int queryDelay =
+            SimulatedLatency.RandomMilliseconds(300, 600);
+
+        Log.Info(
+            $"CouponRepository -> Executing query for Coupon '{code}'...");
+
+        Thread.Sleep(queryDelay);
+
+        List<Coupon> coupons =
+            _store.Read<List<Coupon>>(DataFiles.Coupons)
+            ?? new List<Coupon>();
+
+        Coupon? coupon = coupons.FirstOrDefault(c =>
+            string.Equals(
+                c.Code,
+                code,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (coupon is not null)
+        {
+            Log.Success(
+                $"CouponRepository -> Coupon '{coupon.Code}' found");
+        }
+        else
+        {
+            Log.Info(
+                $"CouponRepository -> Coupon '{code}' not found");
+        }
+
+        return coupon;
+    }
 }

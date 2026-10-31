@@ -128,3 +128,74 @@ For asynchronous coordination, use `SemaphoreSlim` with `WaitAsync()` and releas
 The unprotected reservation oversold because multiple tasks could read the same available stock before any of them updated it. Each task could conclude that enough stock was available, allowing the combined reservations to exceed the actual quantity. This is a race condition.
 
 The problem was prevented by protecting the stock check and update as one coordinated operation using an appropriate synchronization mechanism, such as `SemaphoreSlim`. This ensures that competing reservations cannot simultaneously pass the availability check and reserve the same stock. The semaphore must be released in a `finally` block so it remains available even if an exception occurs.
+
+
+## Task 9.6 — Sync vs async comparison
+
+### Execution Results
+
+Both synchronous and asynchronous versions processed the first 10 incoming orders with failures disabled.
+
+| Metric | Sync | Async |
+|---|---:|---:|
+| Total Orders | 10 | 10 |
+| Completed | 8 | 8 |
+| Rejected | 2 | 2 |
+| Elapsed Time | 11,450 ms | 9,541 ms |
+| Distinct Thread IDs | 10 | 10 |
+| ThreadPool Before | 4 | 4 |
+| ThreadPool After | 4 | 11 |
+
+Both versions produced the expected results: 8 completed orders and 2 rejected orders.
+
+### Questions & Answers
+
+**Q1: Does async make processing a single order faster? Explain why or why not.**
+
+No, async does not necessarily make a single order process faster. Its main benefit is that it does not block a thread while waiting for I/O operations, such as database or file access. This allows the application to use available threads more efficiently.
+
+**Q2: Why does async scale better than synchronous processing when handling multiple orders?**
+
+Async scales better because threads are not blocked while waiting for I/O operations to complete. Instead, they can be released to handle other work. This reduces unnecessary thread usage and helps the application handle more concurrent operations efficiently.
+
+**Q3: What would happen if we processed 1,000 orders using the synchronous approach?**
+
+Processing 1,000 orders synchronously could require a large number of dedicated threads if each order runs on its own thread. This increases memory consumption and context switching overhead. It may also lead to resource exhaustion and reduced application performance.
+
+**Q4: Why is async essential when working with databases, files, and external APIs?**
+
+Database, file, and external API operations often involve waiting for external resources. Using async allows the application to release the current thread during these waiting periods instead of blocking it. This improves scalability, resource utilization, and application responsiveness.
+
+### Conclusion
+
+In this experiment, the asynchronous implementation completed the 10 orders in 9,541 ms, compared to 11,450 ms for the synchronous implementation.
+
+Async was approximately 1,909 ms faster in this run. However, the main advantage of async is not necessarily reducing the execution time of a single operation; it is improving scalability and thread utilization when handling I/O-bound operations.\
+
+## Task 9.7 — Fire-and-forget investigation
+
+### Console Output Analysis
+
+**Before Fix:**
+
+The email sending operation started, but the method returned before the email was completed.
+
+The output showed:
+
+- Email sending started.
+- "Order processing finished" was printed.
+- The email completed afterward.
+
+This demonstrates that the caller does not wait for a fire-and-forget operation.
+
+**After Fix:**
+
+The method awaited the email operation.
+
+The output showed:
+
+- Email sending started.
+- Email sent successfully.
+- "Order processing finished" was printed afterward.
+
+This confirms that awaiting the email task ensures the operation completes before the method returns.

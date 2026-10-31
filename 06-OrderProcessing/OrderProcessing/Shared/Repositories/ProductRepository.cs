@@ -271,6 +271,41 @@ public class ProductRepository
 
     #endregion
 
+    public Product? GetById(int id)
+    {
+        Log.Info("ProductRepository -> Opening connection...");
 
+        // Step 1: Open connection (200 ms)
+        Thread.Sleep(200);
+
+        // Step 2: Execute query (300–600 ms)
+        int queryDelay =
+            SimulatedLatency.RandomMilliseconds(300, 600);
+
+        Log.Info(
+            $"ProductRepository -> Executing query for Product #{id}...");
+
+        Thread.Sleep(queryDelay);
+
+        List<Product> products =
+            _store.Read<List<Product>>(DataFiles.Products)
+            ?? new List<Product>();
+
+        Product? product =
+            products.FirstOrDefault(p => p.Id == id);
+
+        if (product is not null)
+        {
+            Log.Success(
+                $"ProductRepository -> Product #{product.Id} found ({product.Name})");
+        }
+        else
+        {
+            Log.Info(
+                $"ProductRepository -> Product #{id} not found");
+        }
+
+        return product;
+    }
 
 }

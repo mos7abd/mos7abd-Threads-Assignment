@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using OrderProcessing.Shared.Exceptions;
 using OrderProcessing.Shared.Logging;
 using OrderProcessing.Shared.Models;
 using OrderProcessing.Shared.Storage;
@@ -13,16 +14,25 @@ namespace OrderProcessing.Shared.Repositories;
 public class OrderRepository
 {
     private readonly JsonFileStore _store;
+    private readonly HashSet<int> _failSaveForOrderIds;
 
-    public OrderRepository(JsonFileStore store)
+    public OrderRepository(JsonFileStore store, IEnumerable<int>? failSaveForOrderIds = null)
     {
         _store = store;
+        _failSaveForOrderIds = new HashSet<int>(
+        failSaveForOrderIds ?? Enumerable.Empty<int>());
+
     }
+
 
     public async Task SaveAsync(
         Order order,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(order);
+        ct.ThrowIfCancellationRequested();
+
+        // Step 1: Open connection (200 ms)
         Log.Info("OrderRepository -> Opening connection...");
 
         await SimulatedLatency.DelayAsync(
@@ -30,25 +40,41 @@ public class OrderRepository
             200,
             ct);
 
-        int queryDelay =
-            SimulatedLatency.RandomMilliseconds(300, 600);
-
+        // Step 2: Begin transaction (100 ms)
         Log.Info(
-            $"OrderRepository -> Saving Order #{order.Id}...");
+            $"OrderRepository -> Beginning transaction for Order #{order.Id}...");
 
         await SimulatedLatency.DelayAsync(
-            "OrderRepository - Execute query",
-            queryDelay,
+            "OrderRepository - Begin transaction",
+            100,
             ct);
 
         bool replaced = false;
 
+        // Step 3: Insert / Update (400 ms)
+        Log.Info(
+            $"OrderRepository -> Saving Order #{order.Id}...");
+
+        await SimulatedLatency.DelayAsync(
+            "OrderRepository - Insert/Update",
+            400,
+            ct);
+        if (order.Status == OrderStatus.Completed &&
+            _failSaveForOrderIds.Contains(order.Id))
+        {
+            Log.Error(
+                $"OrderRepository -> Failed to save Order #{order.Id}: " +
+                "Connection lost during commit");
+
+            throw new DatabaseWriteException(
+                "Connection lost during commit");
+        }
         await _store.UpdateAsync<List<Order>>(
             DataFiles.Orders,
             orders =>
             {
                 int index = orders.FindIndex(
-                    o => o.Id == order.Id);
+                    existingOrder => existingOrder.Id == order.Id);
 
                 if (index >= 0)
                 {
@@ -65,6 +91,15 @@ public class OrderRepository
             () => new List<Order>(),
             ct);
 
+        // Step 4: Commit (200 ms)
+        Log.Info(
+            $"OrderRepository -> Committing transaction for Order #{order.Id}...");
+
+        await SimulatedLatency.DelayAsync(
+            "OrderRepository - Commit",
+            200,
+            ct);
+
         if (replaced)
         {
             Log.Success(
@@ -76,6 +111,7 @@ public class OrderRepository
                 $"OrderRepository -> Order #{order.Id} added.");
         }
     }
+
 
 
     public async Task<List<Order>> GetAllAsync(
@@ -149,6 +185,77 @@ public class OrderRepository
 
         return filteredOrders;
     }
+    public void Save(Order order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
 
+        // Step 1: Open connection (200 ms)
+        Log.Info("OrderRepository -> Opening connection...");
+
+        Thread.Sleep(200);
+
+        // Step 2: Begin transaction (100 ms)
+        Log.Info(
+            $"OrderRepository -> Beginning transaction for Order #{order.Id}...");
+
+        Thread.Sleep(100);
+
+        bool replaced = false;
+
+        // Step 3: Insert / Update (400 ms)
+        Log.Info(
+            $"OrderRepository -> Saving Order #{order.Id}...");
+
+        Thread.Sleep(400);
+
+        if (order.Status == OrderStatus.Completed &&
+            _failSaveForOrderIds.Contains(order.Id))
+        {
+            Log.Error(
+                $"OrderRepository -> Failed to save Order #{order.Id}: " +
+                "Connection lost during commit");
+
+            throw new DatabaseWriteException(
+                "Connection lost during commit");
+        }
+
+        _store.Update<List<Order>>(
+            DataFiles.Orders,
+            orders =>
+            {
+                int index = orders.FindIndex(
+                    existingOrder => existingOrder.Id == order.Id);
+
+                if (index >= 0)
+                {
+                    orders[index] = order;
+                    replaced = true;
+                }
+                else
+                {
+                    orders.Add(order);
+                }
+
+                return orders;
+            },
+            () => new List<Order>());
+
+        // Step 4: Commit (200 ms)
+        Log.Info(
+            $"OrderRepository -> Committing transaction for Order #{order.Id}...");
+
+        Thread.Sleep(200);
+
+        if (replaced)
+        {
+            Log.Success(
+                $"OrderRepository -> Order #{order.Id} updated.");
+        }
+        else
+        {
+            Log.Success(
+                $"OrderRepository -> Order #{order.Id} added.");
+        }
+    }
 
 }
