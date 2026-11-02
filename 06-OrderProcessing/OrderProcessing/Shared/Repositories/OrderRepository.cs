@@ -258,4 +258,44 @@ public class OrderRepository
         }
     }
 
+    public async Task<List<Order>> GetByCustomerIdAsync(
+    int customerId,
+    CancellationToken ct = default)
+    {
+        Log.Info(
+            $"OrderRepository -> Opening connection for Customer #{customerId}...");
+
+        await SimulatedLatency.DelayAsync(
+            "OrderRepository - Open connection",
+            200,
+            ct);
+
+        int queryDelay =
+            SimulatedLatency.RandomMilliseconds(300, 600);
+
+        Log.Info(
+            $"OrderRepository -> Executing query for Customer #{customerId}...");
+
+        await SimulatedLatency.DelayAsync(
+            "OrderRepository - Execute query",
+            queryDelay,
+            ct);
+
+        List<Order> allOrders =
+            await _store.ReadAsync<List<Order>>(
+                DataFiles.Orders,
+                ct)
+            ?? new List<Order>();
+
+        List<Order> customerOrders = allOrders
+            .Where(order => order.CustomerId == customerId)
+            .ToList();
+
+        Log.Success(
+            $"OrderRepository -> Retrieved {customerOrders.Count} orders " +
+            $"for Customer #{customerId}.");
+
+        return customerOrders;
+    }
+
 }

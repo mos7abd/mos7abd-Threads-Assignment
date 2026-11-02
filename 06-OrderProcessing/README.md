@@ -1,3 +1,176 @@
+# Mini Project — Order Processing System
+
+## 1. Project Overview
+
+### Target Framework
+- .NET 10.0
+
+### Project Structure
+Explain the folder structure and the responsibility of each project, folder, and important class.
+
+Include:
+- Shared Models
+- Interfaces
+- Services
+- Repositories
+- Storage
+- Utilities
+- Logging
+- Exceptions
+- Phase 1
+- Phase 2
+- Phase 3
+- Phase 4
+
+### How to Run
+Explain how to build and run the application and how to select each phase from the main menu.
+
+### Data Folder
+Explain where the runtime `Data` folder is created, how its location is determined, and which JSON files it contains.
+
+---
+
+## 2. Storage Design
+
+### File List
+Document every JSON file, its purpose, and the phase that uses it.
+
+### JSON Format
+Describe the structure of the stored records and provide representative JSON examples.
+
+### Concurrent File Access
+Explain how `JsonFileStore` protects concurrent updates using:
+- `ConcurrentDictionary` to maintain file-specific locks.
+- `SemaphoreSlim` to coordinate access to each file.
+- `WaitAsync(ct)` to support asynchronous waiting and cancellation.
+- Temporary files and atomic replacement to prevent corrupted or partially written JSON files.
+
+Explain how these mechanisms prevent lost updates and file corruption.
+
+---
+
+## 3. Performance Results
+
+Include actual measurements from all required experiments.
+
+### Phase 1 — Sync vs Async
+
+| Metric | Synchronous | Asynchronous |
+|---|---:|---:|
+| Execution Time | 83.1 seconds | 97.3 seconds |
+| Total Orders | 20 | 20 |
+| Validated | 15 | 15 |
+| Rejected | 5 | 5 |
+
+### Phase 2 — Pricing and Concurrent Processing
+
+Document:
+- Sequential vs concurrent pricing measurements.
+- Concurrent processing time: 7.057 seconds.
+- Completed: 13.
+- Rejected: 6.
+- Failed: 1.
+
+### Phase 3 — Sync vs Async
+
+Include the actual measurements for:
+- Synchronous processing using 10 threads.
+- Asynchronous processing using 10 tasks.
+- Execution time.
+- Distinct thread IDs.
+- `ThreadPool.ThreadCount`.
+
+### Phase 4 — Dashboard, Shipping, Fraud Scoring and Email
+
+Include:
+- Customer Dashboard execution time and concurrency measurements.
+- Fastest Shipping Quote execution time and distinct threads.
+- Fraud Scoring sequential vs parallel execution time.
+- Email Re-send execution time and maximum concurrent sends.
+
+For every experiment, include the actual values for elapsed time, distinct threads, and `ThreadPool.ThreadCount` where applicable.
+
+---
+
+## 4. Console Screenshots
+
+Add screenshots organized by phase.
+
+### Phase 1
+- Phase 1 execution.
+
+### Phase 2
+- Race condition demonstration.
+- Faulted task.
+- Payment timeout.
+- Refund.
+
+### Phase 3
+- Email retry.
+- Fire-and-forget before fix.
+- Fire-and-forget after fix.
+
+### Phase 4
+- Task 10.1 — Live Checkout Progress.
+- Task 10.2 — Customer Dashboard.
+- Task 10.3 — Fastest Shipping Quote.
+- Task 10.4 A — Fraud Scoring.
+- Task 10.4 B — Email Re-send.
+- One cancelled run using `--cancel-after`.
+
+---
+
+## 5. Problems Encountered and Solutions
+
+Document the actual problems discovered during development and how each one was resolved.
+
+For each problem, describe:
+1. The problem.
+2. Why it happened.
+3. The solution.
+4. How the solution was verified.
+
+---
+
+## 6. Questions and Answers
+
+Include all questions and answers from:
+- Phase 1.
+- Phase 2.
+- Phase 3.
+- Phase 4.
+
+Keep the original question wording and organize the answers under their corresponding phases and tasks.
+
+---
+
+## 7. Sample Output
+
+Include the final JSON files for the required project states.
+
+Organize them under:
+
+`sample-output/`
+
+Document which phase or task each sample represents.
+
+---
+
+## Final Verification Checklist
+
+- [ ] Project targets `net10.0`.
+- [ ] All four phases can be selected and executed from the menu.
+- [ ] Runtime Data folder location is documented.
+- [ ] Project structure and class responsibilities are documented.
+- [ ] Storage design and JSON formats are documented.
+- [ ] Concurrent file access protection is explained.
+- [ ] All required performance measurements are included.
+- [ ] All required console screenshots are included.
+- [ ] Development problems and solutions are documented.
+- [ ] All questions from Phases 1–4 are answered.
+- [ ] `sample-output/` contains the final JSON files for the required states.
+
+
 ## Phase 1 Questions
 
 ### 1. Why are the sync and async times almost the same when orders are awaited one after another?
@@ -199,3 +372,214 @@ The output showed:
 - "Order processing finished" was printed afterward.
 
 This confirms that awaiting the email task ensures the operation completes before the method returns.
+
+### Phase 4 – Task 10.1: Live Checkout Progress
+
+**Implementation:**
+- Started processing all 20 orders concurrently.
+- Used an unbounded `Channel<OrderProcessingResult>` to publish each order's result immediately after processing completes.
+- A dedicated consumer reads results from the channel and prints them in completion order.
+- Used `Task.WhenAll` once to wait for all processing tasks to finish before completing the channel and printing the final status summary.
+- Each result includes the processed order and its elapsed processing time.
+
+**Verification:**
+- All 20 orders were processed.
+- Results were printed incrementally in completion order, not input order.
+- Final status counts matched the expected Task 9.4 end state:
+
+| Status | Count |
+|---|---:|
+| Pending | 0 |
+| Validated | 0 |
+| Rejected | 6 |
+| PaymentFailed | 2 |
+| Completed | 11 |
+| Failed | 1 |
+| **Total** | **20** |
+
+**Key Design Decision:**
+`Channel` handles real-time result delivery, while `Task.WhenAll` coordinates the completion of all processing tasks. No repeated `Task.WhenAny` loop or unfinished-task list rebuilding is used.
+
+## Phase 4 – Task 10.2: Customer Dashboard
+
+### Implementation
+Implemented `CustomerDashboardService.LoadAsync` to load customer profile, orders, payments, and emails concurrently.
+
+The four operations are started before waiting for their completion. `Task.WhenAll` is used to wait for all operations, and the elapsed time is measured using `Stopwatch`.
+
+The service also collects and reports all exceptions when multiple operations fail.
+
+### Test 1: Customer #3 — Successful Dashboard
+
+**Actual console output:**
+```text
+Dashboard loaded in 0.80 seconds.
+Customer #3 Omar Hassan
+Orders: 2
+Payments: 2
+Emails: 1
+```
+
+**Result:** Passed.
+
+The returned dashboard contains:
+- 2 orders: #3 Completed and #13 Failed.
+- 2 payments: #3 Captured and #13 Refunded.
+- 1 email: #3.
+
+### Test 2: Customer #99 — Multiple Failures
+
+**Failure scenarios:**
+- Customer profile lookup fails because Customer #99 does not exist.
+- Payments loading is configured to throw `TimeoutException("Payments store timeout")`.
+
+**Actual console output:**
+```text
+Dashboard loading failed:
+Customer #99 not found
+Payments store timeout
+```
+
+**Result:** Passed.
+
+Both exceptions were reported, demonstrating that the dashboard does not stop reporting failures after encountering the first exception.
+
+### Concurrency Verification
+
+The logs show that all four operations started almost simultaneously:
+
+| Operation | Start time |
+|---|---|
+| Customer | 09:32:12.319 |
+| Orders | 09:32:12.320 |
+| Payments | 09:32:12.321 |
+| Emails | 09:32:12.322 |
+
+The successful dashboard completed in approximately **0.80 seconds**, close to the duration of the slowest operation rather than the sum of all four operation durations.
+
+This confirms the expected concurrent execution behavior.
+
+### Task 10.3 – Fastest Shipping Quote: Concurrency Design Decision
+
+**Selected Tool: `Task.WhenAny`**
+
+The shipping scenario involves three independent carriers competing to provide a quote. The system must select the first successful response without waiting for slower carriers to finish.
+
+`Task.WhenAny` is the appropriate choice because it allows the service to react whenever any carrier task completes. If a carrier fails, the service can continue waiting for the remaining tasks. Once a successful quote is received, the service cancels all other active carrier requests.
+
+This approach satisfies the live system's requirement to return the fastest successful shipping quote while respecting the 1.2-second time budget and supporting caller cancellation.
+
+**Why not await tasks one by one?**
+
+Awaiting carrier tasks sequentially would make the result depend on the order in which carriers are awaited, rather than their actual completion times. A faster response from another carrier could be ignored while the service waits for a slower one.
+
+**Design Decision:**
+
+Use `Task.WhenAny` to identify completed carrier operations dynamically, combined with `CancellationTokenSource` to cancel unnecessary requests and enforce the time budget.
+
+
+## Task 10.4 — Fraud Scoring and Email Re-send
+
+### A — Fraud Scoring (CPU-bound)
+
+**Scenario:**
+
+The system needs to evaluate 10,000 orders to identify potentially fraudulent transactions. Each order receives a fraud score, and orders with a score of 90 or higher are flagged for review.
+
+**Implementation:**
+
+- Created 10,000 orders in memory with IDs from 1 to 10,000 without using any files.
+- Implemented the exact scoring algorithm provided in the assignment.
+- First, processed all orders sequentially using a regular `foreach` loop and measured the execution time.
+- Then, processed the same orders in parallel using `Parallel.ForEach`.
+- Used `ParallelOptions.MaxDegreeOfParallelism = Environment.ProcessorCount` to distribute the CPU-bound work across available processor cores without exceeding the specified concurrency limit.
+- Used `ConcurrentBag<int>` to collect flagged order IDs safely from multiple threads without losing or duplicating results.
+- Used `ConcurrentDictionary<int, byte>` to track the distinct thread IDs involved in the parallel execution.
+- Passed the `CancellationToken` through `ParallelOptions` to support cancellation of the parallel operation.
+
+**Why these tools?**
+
+Fraud scoring is CPU-bound because it involves intensive calculations rather than waiting for external operations. `Parallel.ForEach` is suitable for distributing independent calculations across multiple processor cores. `ConcurrentBag` provides thread-safe collection, while `ConcurrentDictionary` allows tracking distinct threads safely.
+
+**Actual Results:**
+
+| Metric | Result |
+|---|---:|
+| Total Orders | 10,000 |
+| Flagged Orders | 1,005 |
+| Sequential Execution Time | 5,985 ms |
+| Parallel Execution Time | 542 ms |
+| Speed-up | 11.04x |
+| Distinct Threads Used | 20 |
+| Environment.ProcessorCount | 20 |
+| Results Match | True |
+
+The first five flagged order IDs were:
+
+`4, 8, 12, 29, 33`
+
+Both sequential and parallel executions produced exactly the same 1,005 flagged orders.
+
+The parallel implementation completed the workload approximately 11 times faster than the sequential implementation.
+
+Cancellation was also tested successfully using a `CancellationTokenSource`.
+
+---
+
+### B — Email Re-send (I/O-bound)
+
+**Scenario:**
+
+The system needs to resend confirmation emails for 30 test orders, with order IDs ranging from 1001 to 1030. All emails must be sent successfully without injected failures, while limiting concurrent sends to a maximum of four.
+
+**Implementation:**
+
+- Created 30 test orders and their corresponding customer records in memory.
+- Reused the existing `IEmailService` implementation through `EmailService`.
+- Disabled injected failures using `failuresEnabled: false`.
+- Used `Parallel.ForEachAsync` to process the email jobs asynchronously.
+- Configured `ParallelOptions.MaxDegreeOfParallelism = 4` to ensure that no more than four email sends run concurrently.
+- Passed the cancellation token to `Parallel.ForEachAsync` and forwarded the loop token to `SendConfirmationAsync`.
+- Used `Interlocked.Increment` and `Interlocked.Decrement` to observe the current number of active sends.
+- Used `Interlocked.CompareExchange` with `Volatile.Read` to track the highest observed concurrency without controlling or limiting it manually.
+- Reused the existing `JsonFileStore` to append email records safely to `emails.json`.
+
+**Why these tools?**
+
+Email sending is I/O-bound because each operation spends time waiting for simulated rendering, SMTP connection, sending, and file operations.
+
+`Parallel.ForEachAsync` allows asynchronous operations to run concurrently while enforcing the configured maximum degree of parallelism.
+
+`Interlocked` is used only to monitor active operations and record the maximum concurrency; it does not control how many operations can run simultaneously.
+
+The existing `JsonFileStore` uses a per-file `SemaphoreSlim` to protect concurrent file updates and prevent lost updates or file corruption. This lock protects data integrity and is separate from the concurrency limit applied to email sending.
+
+**Actual Results:**
+
+| Metric | Result |
+|---|---:|
+| Total Emails | 30 |
+| Successful Sends | 30 |
+| Failed Sends | 0 |
+| Max Concurrent Sends | 4 |
+| Total Execution Time | 8,499 ms |
+
+All 30 email sends completed successfully on their first attempt.
+
+**Execution Time Explanation:**
+
+Each email has three simulated I/O delays:
+
+- Rendering: 200 ms
+- SMTP connection: 300 ms
+- Sending: 500 ms
+
+Total simulated delay per email is approximately 1 second.
+
+With 30 emails and a maximum concurrency of four:
+
+`30 ÷ 4 × 1 second ≈ 7.5 seconds`
+
+The actual execution time was approximately 8.5 seconds due to additional processing and file-update overhead.
+
+**Note:** The existing email records are preserved when new messages are appended to `emails.json`. The final JSON contents still need to be verified to confirm that all 30 new order IDs appear exactly once.

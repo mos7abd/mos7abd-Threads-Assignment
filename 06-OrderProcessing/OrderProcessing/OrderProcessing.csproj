@@ -16,8 +16,4 @@
     <None Remove="screenshots\**" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Phase4\" />
-  </ItemGroup>
-
 </Project>
