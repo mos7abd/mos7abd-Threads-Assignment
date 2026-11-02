@@ -1,0 +1,10 @@
+# Visual Studio
+.vs/
+.vscode/
+
+# Build output
+**/bin/
+**/obj/
+
+# Runtime data
+**/Data/
